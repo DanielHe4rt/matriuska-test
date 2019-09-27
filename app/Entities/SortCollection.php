@@ -15,7 +15,6 @@ class SortCollection
     public $folders;
 
     public $rootFolders;
-
     public function __construct(string $email)
     {
         $this->emails = new Email($email);
@@ -26,62 +25,70 @@ class SortCollection
         $this->emails->load();
         $this->folders->load();
 
-        $sortedFolders = $this->getSortedFolders();
-        $sortedEmails = $this->getFolderedMailsBySize();
+        $this->setFolderSize();
+        $this->getRootFolders();
 
-        return $this->getFoldersBySize($sortedFolders,$sortedEmails);
+        dd($this->result());
+
+
+        return true;
     }
 
-    public function getSortedFolders(){
-        $folderAux = [];
-        foreach($this->folders as $folder){
-            if(!array_key_exists($folder->parentId,$folderAux)){
-                $folderAux[$folder->parentId][] = $folder->id;
-                continue;
-            }
-            $folderAux[$folder->parentId][] = $folder->id;
-        }
-        $this->rootFolders = $folderAux[0];
-        unset($folderAux[0]);
-        return $folderAux;
-    }
-
-    public function getFolderedMailsBySize(){
-        $emailAux = [];
-
+    public function setFolderSize(){
         foreach($this->emails as $email){
-            if(!array_key_exists($email->folderId,$emailAux)){
-                $emailAux[$email->folderId]['size'] = $email->size;
-                continue;
-            }
-            $emailAux[$email->folderId]['size'] += $email->size;
+            $folderIndex = $this->getFolderIndex($email->folderId);
+            $this->folders[$folderIndex]->size += $email->size;
         }
-
-        return $emailAux;
     }
 
-    public function getFoldersBySize($folders,$sizedMails){
-        $result = [];
-        foreach($this->rootFolders as $value){
-            if(!in_array($value,$result)){
-                $result[$value] = $sizedMails[$value]['size'];
-                continue;
-            }
-            $result[$value] += $sizedMails[$value]['size'];
-        }
-        foreach($folders as $folderKey => $folder){
-            foreach ($folder as $value){
-                $result[$folderKey] += $sizedMails[$value]['size'];
+    public function getFolderIndex($emailFolderId){
+        foreach($this->folders as $key => $folder){
+            if($folder->id == $emailFolderId){
+                return $key;
             }
         }
-
-        arsort($result);
-        $resultSocorro = [];
-        foreach($result as $key => $value){
-            $resultSocorro[] = $key;
-        }
-
-        return $resultSocorro;
     }
 
+    public function getRootFolders(){
+        $aux = [];
+        foreach($this->folders as $folder){
+            if($folder->parentId == 0){
+                $aux[] = $folder;
+            }
+        }
+        $this->rootFolders = $aux;
+        return $aux;
+    }
+
+    public function getRootParent($folder){
+        if($folder->parentId !== 0){
+            $aux = array_search($folder->parentId, array_column($this->folders->getArrayCopy(),'id'));
+            return $this->getRootParent($this->folders[$aux]);
+        }
+        return $folder;
+    }
+
+    public function getFolderId($folder){
+        foreach($this->folders as $key => $value){
+            if($folder->id == $value->id){
+
+                return $value;
+            }
+        }
+    }
+
+    public function result(){
+
+        foreach($this->folders as $folder){
+            if($folder->parentId === 0){
+                continue;
+            }
+
+            $rootFolder = $this->getRootParent($folder);
+            $index = array_search($rootFolder,(array)$this->rootFolders,true);
+            $this->rootFolders[$index]->size += $folder->size;
+        }
+
+        return $this->rootFolders;
+    }
 }
